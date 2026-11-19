@@ -1,5 +1,24 @@
-GoAccess [![C build](https://github.com/allinurl/goaccess/actions/workflows/build-test.yml/badge.svg)](https://github.com/allinurl/goaccess/actions/workflows/build-test.yml) [![GoAccess](https://goaccess.io/badge)](https://goaccess.io)
+GoAccess [![C build](https://github.com/RedSparr0w/goaccess/actions/workflows/build-test.yml/badge.svg)](https://github.com/RedSparr0w/goaccess/actions/workflows/build-test.yml) [![GoAccess](https://goaccess.io/badge)](https://goaccess.io)
 ========
+
+This fork's main repository is [RedSparr0w/goaccess](https://github.com/RedSparr0w/goaccess).
+The original project is [allinurl/goaccess](https://github.com/allinurl/goaccess).
+
+### HTML table filters
+
+Each report table includes a case-insensitive substring search. Use Virtual Hosts
+to find a website (requires `%v` in the log format), Hosts to find an IP address,
+or other panels to find URLs, referrers, status codes, browsers and other data.
+Request methods and protocols are also searchable when present. Clear the search
+field to restore all rows. Searches include nested rows and keep their ancestors;
+expand a matching group to inspect its children. Filtering applies before
+pagination and remains active during live updates.
+
+These searches filter individual tables. Charts, summary metrics, percentages
+and table totals still describe the full report; independent aggregated panels
+cannot recalculate report-wide traffic for a selected website or IP. To limit an
+entire report, filter the input logs before processing (or use existing options
+such as `--exclude-ip`, `--ignore-status` and `--ignore-referrer`).
 
 ## What is it? ##
 GoAccess is an open source, real-time web log analyzer and interactive viewer

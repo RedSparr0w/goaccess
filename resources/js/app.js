@@ -1777,6 +1777,15 @@ GoAccess.Tables = {
 			}.bind(this);
 		}.bind(this));
 
+		$$('.panel-filter', function (item) {
+			var panel = item.getAttribute('data-panel');
+			item.value = GoAccess.Util.getProp(GoAccess.AppState, panel + '.filter') || '';
+			item.oninput = debounce(function () {
+				GoAccess.Util.setProp(GoAccess.AppState, panel + '.filter', item.value);
+				this.renderTable(panel, 1);
+			}.bind(this), 150);
+		}.bind(this));
+
 		$$('.panel-prev', function (item) {
 			item.onclick = function (e) {
 				var panel = e.currentTarget.getAttribute('data-panel');
@@ -1995,7 +2004,36 @@ GoAccess.Tables = {
 
 	// Get total number of pages given the number of items on array
 	getTotalPages: function (dataItems) {
-		return Math.ceil(dataItems.length / GoAccess.getPrefs().perPage);
+		return Math.max(1, Math.ceil(dataItems.length / GoAccess.getPrefs().perPage));
+	},
+
+	// Keep matching descendants and their ancestors without modifying report data.
+	filterRows: function (rows, query) {
+		query = query.trim().toLowerCase();
+		if (!query) return rows;
+		return rows.reduce(function (matches, row) {
+			if (typeof row === 'string') {
+				if (row.toLowerCase().indexOf(query) !== -1) matches.push(row);
+				return matches;
+			}
+			var ownMatch = ['data', 'method', 'protocol'].some(function (key) {
+				return row[key] != null && String(row[key]).toLowerCase().indexOf(query) !== -1;
+			});
+			var children = this.filterRows(row.items || [], query);
+			if (ownMatch || children.length) {
+				matches.push(Object.assign({}, row, { items: ownMatch ? row.items : children }));
+			}
+			return matches;
+		}.bind(this), []);
+	},
+
+	getFilteredRows: function (panel) {
+		var rows = GoAccess.getPanelData(panel).data;
+		var query = GoAccess.Util.getProp(GoAccess.AppState, panel + '.filter') || '';
+		var filtered = this.filterRows(rows, query);
+		var count = $('.panel-filter-count[data-panel="' + panel + '"]');
+		if (count) count.textContent = query ? filtered.length + ' of ' + rows.length + ' top-level rows match' : '';
+		return filtered;
 	},
 
 	// Get a shallow copy of a portion of the given data array and the
@@ -2203,8 +2241,14 @@ GoAccess.Tables = {
 		dataItems = this.getPage(panel, dataItems, page);
 		var rows = [];
 		this.renderRows(rows, panel, ui, dataItems);
-		if (rows.length == 0)
+		if (rows.length == 0) {
+			table.innerHTML = '';
+			var emptyRow = table.insertRow();
+			var emptyCell = emptyRow.insertCell();
+			emptyCell.colSpan = ui.items.length + 2;
+			emptyCell.textContent = 'No matching rows';
 			return;
+		}
 
 		table.innerHTML = GoAccess.AppTpls.Tables.data.render({
 			rows: rows
@@ -2225,7 +2269,7 @@ GoAccess.Tables = {
 	},
 
 	renderTable: function (panel, page) {
-		var dataItems = GoAccess.getPanelData(panel).data;
+		var dataItems = this.getFilteredRows(panel);
 		var ui = GoAccess.getPanelUI(panel);
 
 		if (page === "LAST_PAGE") {
@@ -2255,8 +2299,10 @@ GoAccess.Tables = {
 		// render actual data
 		if (data.hasOwnProperty('data')) {
 			page = this.getCurPage(panel);
-			this.togglePagination(panel, page, data.data);
-			this.renderDataRows(panel, ui, data.data, page);
+			var filtered = this.getFilteredRows(panel);
+			page = Math.max(1, Math.min(page, this.getTotalPages(filtered)));
+			this.togglePagination(panel, page, filtered);
+			this.renderDataRows(panel, ui, filtered, page);
 		}
 
 		// render meta data

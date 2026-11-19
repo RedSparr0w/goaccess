@@ -1844,3 +1844,7 @@ html.dark.purple::-webkit-scrollbar-thumb:hover,
 .nav-list li .toggle-panel {
 	margin-left: auto;
 }
+
+.panel-filter-wrap { margin-bottom: 12px; }
+.panel-filter-wrap input { max-width: 32em; }
+.panel-filter-wrap small { display: block; }
