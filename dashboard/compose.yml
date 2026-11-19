@@ -16,5 +16,11 @@ services:
       REPORT_CACHE_SECONDS: "30"
       REPORT_MAX_ITEMS: "366"
       REPORT_TIMEOUT: "180"
+      INDEX_PATH: /var/cache/goaccess-index/requests.sqlite3
+      INDEX_INTERVAL: "5"
     volumes:
       - /home/redsparr0w/docker/npm/data/logs:/opt/log:ro
+      - goaccess_index:/var/cache/goaccess-index
+
+volumes:
+  goaccess_index:

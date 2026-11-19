@@ -43,7 +43,7 @@ CMD ["--help"]
 # Optional report-wide filtering service. The default image remains the CLI.
 FROM runtime AS dashboard
 RUN apk add --no-cache python3
-COPY dashboard/server.py /opt/dashboard/server.py
+COPY dashboard/*.py /opt/dashboard/
 EXPOSE 7880
 ENTRYPOINT ["python3", "/opt/dashboard/server.py"]
 CMD []

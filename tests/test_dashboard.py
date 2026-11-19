@@ -42,47 +42,36 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual([arg for arg in command if arg.startswith('--output=')],
                          ['--output=' + str(Path('/tmp/report') / 'report.json')])
 
-    def test_snapshot_reuse_rotation_refresh_and_filter_cache(self):
-        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {'LOG_PATH': directory}, clear=True):
+    def test_persistent_results_and_selected_input(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {}, clear=True):
             root = Path(directory)
+            os.environ.update(LOG_PATH=directory, INDEX_PATH=str(root / 'index.sqlite3'))
+            def line(site, ip):
+                return (f'[01/Jul/2026:06:20:38 +0000] - - 200 - GET https {site} "/" [Client {ip}] [Length 100] [Gzip -] [Sent-to 127.0.0.1] "Agent" "-"\n').encode()
             current = root / 'proxy-host-1_access.log'
-            current.write_bytes(b'current')
-            archive = root / 'proxy-host-1_access.log.1.gz'
-            with gzip.open(archive, 'wb') as stream:
-                stream.write(b'archive')
-            (root / 'proxy-host-1_error.log').write_bytes(b'ignore')
+            first, second = line('one.example', '192.0.2.1'), line('two.example', '192.0.2.2')
+            current.write_bytes(first + second)
             calls = []
-            sources = []
-
             def run(command, **kwargs):
-                calls.append(command)
-                sources.append(kwargs['stdin'].read())
-                outputs = [Path(arg.split('=', 1)[1]) for arg in command if arg.startswith('--output=')]
-                self.assertEqual(len(outputs), 1)
-                outputs[0].write_text('<html><body>native</body></html>' if outputs[0].suffix == '.html' else json.dumps({'general': {'valid_requests': 1}, 'hosts': {'data': []}}))
+                calls.append(kwargs['stdin'].read())
+                output = next(Path(arg.split('=', 1)[1]) for arg in command if arg.startswith('--output='))
+                output.write_text('<html><body>native</body></html>')
                 return type('Result', (), {'returncode': 0})()
-
             reports = self.reports()
-            with patch.object(server.subprocess, 'run', run), patch.object(server.gzip, 'open', wraps=gzip.open) as decompressor:
-                reports.get([])
-                reports.get([])
-                reports.get([('site', 'a.example')], 'json')
-                reports.get([('site', 'b.example')], 'json')
-                self.assertEqual(len(calls), 3)
-                self.assertEqual(decompressor.call_count, 1)
-                self.assertTrue(all(source == b'current\narchive\n' for source in sources))
-                current.write_bytes(b'rotated')
-                reports.get([], refresh=True)
-                self.assertEqual(sources[-1], b'rotated\narchive\n')
-                self.assertEqual(decompressor.call_count, 2)
-                # Rebuild invalidates filtered results from the old log snapshot.
-                reports.get([('site', 'a.example')], 'json')
-                self.assertEqual(len(calls), 5)
-                reports.get([('site', 'a.example')], 'json', refresh=True)
-                self.assertEqual(len(calls), 6)
-                self.assertEqual(decompressor.call_count, 2)
-            with patch.dict(os.environ, {'SKIP_ARCHIVED_LOGS': 'True'}):
-                self.assertEqual(len(reports.files()), 1)
+            with patch.object(server.subprocess, 'run', run):
+                reports.get([('site', 'one.example')])
+                self.assertEqual(calls, [first])
+                reports.get([('site', 'one.example')])
+                self.assertEqual(len(calls), 1)
+                restarted = self.reports()
+                restarted.get([('site', 'one.example')])
+                self.assertEqual(len(calls), 1)
+                with current.open('ab') as stream:
+                    stream.write(first)
+                reports.update_index()
+                reports.get([('site', 'one.example')])
+                self.assertEqual(calls[-1], first + first)
+                self.assertEqual(len(calls), 2)
 
     def test_json_matches_native_html_escaping(self):
         self.assertEqual(server.browser_data({'data': ["<script>&'", 12]}),

@@ -1,93 +1,82 @@
-# Report-wide filters in the native GoAccess report
+# Indexed filtering in the native GoAccess report
 
-Website, client IP, status and method controls are part of the GoAccess report,
-above the overall metrics. More filters contains URL, referrer, user agent,
-protocol and remote user. Apply updates every table, chart, percentage and total
-in place from the matching request dataset. There is no iframe or separate UI.
-The previous individual table searches and their code have been removed.
+The native report contains website, client IP, method and status filters, with
+URL, referrer, user agent, protocol and remote user under More filters. There is
+no iframe or individual table search UI. Filters combine with AND and update
+all traffic panels, charts and totals together.
 
-Filters combine with AND. Site, IP, method, protocol, user and status match
-exactly; URL, referrer and user agent use case-sensitive substring matches.
-Only fields present in the log format can match. NPM proxy access logs are the
-default format. Site and IP suggestions come from data already loaded in the
-report, with suggestions retained from previous selections. Type any value to
-filter it even when it does not appear in the suggestions. The URL preserves the
-selection for bookmarks.
+Website, IP and status inputs have searchable dropdowns. Focus an input to see
+values; type a prefix to search, then click a value or use arrow keys and Enter.
+Choose All to clear that field. Suggestions query the complete request index,
+not the report's top rows. Each search returns up to 100 values; type more to
+narrow it. Free text and Apply also work. Method selection applies immediately.
 
-## Deploy without cloning
+## Deployment
 
-Push the changes to `master`, then use `dashboard/compose.yml` as your server's
-Compose file. It keeps the existing port 7880 and NPM log mount. Run:
+Push changes, then replace the server Compose file with `dashboard/compose.yml`.
+It retains port 7880 and the NPM log mount and adds a **goaccess_index** volume:
 
 ```sh
 docker compose config --quiet
 docker compose build --pull
 docker compose up -d
+docker compose logs -f goaccess
 ```
 
-The `dashboard` image target serves the native GoAccess HTML and its `/data`
-endpoint. Refresh the browser after rebuilding so the new controls load. The
-refresh button bypasses both browser and server result caches. There is no
-WebSocket connection or automatic refresh.
+Reload the browser to load the new inputs. The index volume stores SQLite data
+and cached reports across container recreation. Keep it for subsequent builds.
+The first startup imports available logs before serving requests; later startups
+check file metadata and reuse indexed history. Allow disk space for the index
+and copies of raw request lines. The old aggregate cache is not used or deleted.
 
-The earlier NPM image's `LOG_TYPE`, `HTML_REFRESH`, `PERSIST`, `RESTORE` and
-`DB_PATH` variables do not apply to this backend. The old cache volume is not
-used or removed. Historical traffic must be available in the mounted raw logs,
-including `.gz` archives. `KEEP_LAST` limits report dates; it cannot recreate
-removed logs. NPM redirection and error reports are not included by default.
+## Data processing and speed
 
-## Performance and timing
+A background worker checks logs every five seconds. It reads only appended
+complete lines from live files. Unchanged gzip archives are not reopened.
+Rotation, truncation, replacement and removal update the index transactionally.
+Incomplete live lines are retried on the next pass. Failed imports retain the
+previous transaction rather than publishing a partial update.
 
-The initial page requires one GoAccess invocation and emits only HTML. A filter
-change emits only JSON; scripts, templates, styles and the page remain loaded.
-Suggestions never start another report build. Browser and server caches keep up
-to eight report selections for 30 seconds by default. Reusing a selection within
-that window avoids aggregation altogether.
+SQLite indexes site/IP (together), IP, status and method. A site/IP selection
+queries matching stored requests directly, without scanning or decompressing the
+original logs. Substring filters on URL, agent and referrer can scan the request
+index. These filters are case-sensitive; site/IP/method/status match exactly.
 
-Unchanged logs reuse a prepared disk-backed input snapshot. Changed files,
-rotation, truncation or added archives invalidate that snapshot on the next
-uncached request. Decompression and copying are timed separately from GoAccess.
-`REPORT_TIMEOUT` covers both preparation and the GoAccess subprocess (after the
-request acquires the build lock).
+GoAccess still parses and aggregates the **selected** requests to retain the
+existing panel semantics. This is not a fully preaggregated analytical engine:
+large selections, including all traffic, can still take time on a cache miss.
+Rendered results are cached on disk by index generation and configuration and
+reused until ingestion changes the dataset, including across restarts. Up to 16
+cached outputs are retained. Browser selections are cached for 30 seconds.
+Refresh forces an ingestion check and bypasses report caches.
 
-The default display limit is GoAccess's normal 366 rows per panel, replacing the
-previous 100,000-row override. This limits report payload and chart work, not
-which requests are filtered or counted in totals. You can increase it with
-`REPORT_MAX_ITEMS`; high values increase browser work and response sizes.
+Only NPM proxy access logs in the default format are supported by this indexed
+backend. The initial import reads the full historical input once. Historical
+traffic must remain in the mounted logs; removed files are removed from the
+index on ingestion. `KEEP_LAST` limits report dates but does not remove indexed
+raw history. NPM's default format does not include protocol version or remote
+user; those filters cannot match absent fields.
 
-Responses support gzip. `Server-Timing` and container logs show `queue`, `source`,
-`goaccess`, `output` and `compress` durations in milliseconds. A cache hit reports
-`cache` instead of rebuilding. `goaccess` includes the entire subprocess,
-including report serialization; it is not just the report's parsing-time metric.
-The browser console's `GoAccess filter timing` entry separates fetch/update time
-from native panel rendering.
-
-An uncached selection still runs a fresh GoAccess aggregation over the prepared
-input. This is not an indexed query engine: an 18-second parse can still take
-roughly that long plus aggregation/output/rendering. The changes remove duplicate
-builds, repeated decompression for unchanged logs, oversized payloads and full-page
-reloads. Actual response time depends on log size and hardware.
+Responses use gzip. Server-Timing headers and container logs separate queue,
+indexed query, GoAccess aggregation, output and compression time. The browser
+console reports native rendering time. The loading overlay is removed entirely
+once the report initializes so it cannot intercept input clicks.
 
 ## Settings
 
-- `LOG_PATH`: directory containing logs (default `/opt/log`).
-- `LOG_PATTERN`: glob below it (default `proxy-host-*_access.log*`).
-- `SKIP_ARCHIVED_LOGS=True`: only read files ending in `.log`.
-- `LOG_FORMAT`, `DATE_FORMAT`, `TIME_FORMAT`: override the NPM parser format.
-- `KEEP_LAST`: optional number of days retained in each report.
-- `REPORT_CACHE_SECONDS`: result cache lifetime (default 30).
-- `REPORT_MAX_ITEMS`: maximum displayed rows per panel (default 366).
-- `REPORT_TIMEOUT`: preparation plus subprocess timeout in seconds (default 180).
-- `PORT`: listening port (default 7880).
+- `LOG_PATH`: directory containing NPM logs (default `/opt/log`).
+- `LOG_PATTERN`: default `proxy-host-*_access.log*`.
+- `SKIP_ARCHIVED_LOGS=True`: ignore files not ending in `.log`.
+- `INDEX_PATH`: SQLite path; Compose uses `/var/cache/goaccess-index/requests.sqlite3`.
+- `INDEX_INTERVAL`: ingestion interval in seconds (default 5).
+- `INDEX_TIMEOUT`: ingestion deadline in seconds (default 3600).
+- `KEEP_LAST`: optional number of days in generated reports.
+- `REPORT_CACHE_SECONDS`: browser dataset cache lifetime (default 30).
+- `REPORT_MAX_ITEMS`: displayed rows per panel (default 366), not an input filter.
+- `REPORT_TIMEOUT`: selected request export and GoAccess deadline (default 180).
+- `PORT`: default 7880.
 
-Native CLI filters are also available:
-
-```sh
-goaccess access.log --log-format=VCOMBINED \
-  --filter=site=example.com --filter=ip=192.0.2.1 -o report.html
-```
-
-Filtered reports require raw logs and fresh aggregation storage. An existing
-persisted aggregate database cannot be filtered retroactively. Static HTML on its
-own cannot recompute report-wide traffic; the integrated controls are enabled
-when the report is served with its data endpoint.
+There is no automatic report refresh; ingestion runs in the background, while
+Refresh loads current traffic. Static HTML cannot recompute aggregates without
+the `/data` endpoint. The native CLI also supports `--filter=site=example.com`
+and other request filters, but requires fresh storage and cannot use --restore.

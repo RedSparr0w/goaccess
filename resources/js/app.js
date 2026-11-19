@@ -2383,26 +2383,59 @@ GoAccess.Filters = {
 		GoAccess.Tables.chartData = {};
 		GoAccess.App.setInitSort();
 		GoAccess.App.renderPanels();
-		this.suggestions(data);
 	},
 
-	suggestions: function (data) {
-		[['site', 'vhosts', 'traffic-sites'], ['ip', 'hosts', 'traffic-ips']].forEach(function (entry) {
-			var list = this.section.querySelector('#' + entry[2]);
-			var values = this.options[entry[0]];
-			((data[entry[1]] || {}).data || []).forEach(function (row) {
-				// Native report strings are HTML-escaped; inputs need the original value.
-				var text = document.createElement('span');
-				text.innerHTML = row.data;
-				values.add(text.textContent);
-			});
-			list.innerHTML = '';
-			Array.from(values).sort().forEach(function (value) {
-				var option = document.createElement('option');
-				option.value = value;
-				list.appendChild(option);
-			});
+	comboboxes: function () {
+		['site', 'ip', 'status', 'protocol', 'user'].forEach(function (field) {
+			var input = this.form.elements.namedItem(field), parent = input.parentNode;
+			input.removeAttribute('list');
+			parent.classList.add('traffic-combobox');
+			var list = document.createElement('div');
+			list.id = 'traffic-options-' + field;
+			list.className = 'traffic-options';
+			list.setAttribute('role', 'listbox'); list.hidden = true;
+			parent.appendChild(list);
+			input.setAttribute('role', 'combobox'); input.setAttribute('aria-autocomplete', 'list');
+			input.setAttribute('aria-controls', list.id); input.setAttribute('aria-expanded', 'false');
+			var serial = 0, active = -1;
+			var close = function () { list.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); };
+			var choose = function (value) { input.value = value; close(); input.focus(); this.load(false); }.bind(this);
+			var show = async function () {
+				var request = ++serial;
+				try {
+					var response = await fetch(this.config.suggestions + '?field=' + field + '&q=' + encodeURIComponent(input.value));
+					if (!response.ok) return;
+					var values = await response.json();
+					if (request !== serial || document.activeElement !== input) return;
+					list.innerHTML = ''; active = -1;
+					[''].concat(values).forEach(function (value, index) {
+						var option = document.createElement('div');
+						option.id = list.id + '-' + index;
+						option.setAttribute('role', 'option'); option.setAttribute('aria-selected', 'false');
+						option.textContent = value || 'All'; option.dataset.value = value;
+						option.onmousedown = function (event) { event.preventDefault(); choose(value); };
+						list.appendChild(option);
+					});
+					list.hidden = false; input.setAttribute('aria-expanded', 'true');
+				} catch (error) { /* Free text and Apply remain available if suggestions fail. */ }
+			}.bind(this);
+			input.onfocus = show; input.oninput = debounce(show, 150);
+			input.onblur = function () { serial++; close(); };
+			input.onkeydown = function (event) {
+				if (event.key === 'Escape') { event.preventDefault(); close(); }
+				if (list.hidden) return;
+				if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+					event.preventDefault();
+					active = (active + (event.key === 'ArrowDown' ? 1 : -1) + list.children.length) % list.children.length;
+					Array.from(list.children).forEach(function (option, index) { option.setAttribute('aria-selected', String(index === active)); });
+					input.setAttribute('aria-activedescendant', list.children[active].id);
+					list.children[active].scrollIntoView({ block: 'nearest' });
+				} else if (event.key === 'Enter' && active >= 0) {
+					event.preventDefault(); choose(list.children[active].dataset.value);
+				}
+			};
 		}.bind(this));
+		this.form.elements.namedItem('method').onchange = function () { this.load(false); }.bind(this);
 	},
 
 	load: async function (refresh) {
@@ -2452,12 +2485,11 @@ GoAccess.Filters = {
 		$('#overall').parentNode.insertBefore(this.section, $('#overall'));
 		this.form = this.section.querySelector('form');
 		this.status = this.section.querySelector('[role="status"]');
-		this.options = { site: new Set(), ip: new Set() };
 		this.readURL();
+		this.comboboxes();
 		this.appliedQuery = this.query(this.form);
 		this.status.textContent = this.scope(this.appliedQuery);
 		this.remember(this.appliedQuery.toString(), GoAccess.AppData);
-		this.suggestions(GoAccess.AppData);
 		this.form.onsubmit = function (event) { event.preventDefault(); this.load(false); }.bind(this);
 		this.section.querySelector('.traffic-filter-clear').onclick = function () {
 			this.form.reset();
@@ -2564,6 +2596,7 @@ GoAccess.App = {
 	},
 
 	initDom: function () {
+		$('.loading-container').classList.add('hide');
 		$('nav').classList.remove('hide');
 		$('.container').classList.remove('hide');
 		$('.spinner').classList.add('hide');

@@ -4,10 +4,12 @@ AUTOMAKE_OPTIONS = subdir-objects
 
 dist_noinst_DATA =                 \
   dashboard/server.py              \
+  dashboard/request_index.py       \
   dashboard/README.md              \
   dashboard/compose.yml            \
   tests/report_filters.py          \
   tests/test_dashboard.py          \
+  tests/test_request_index.py      \
   tests/native-filters.cjs         \
   resources/tpls.html              \
   resources/css/app.css            \

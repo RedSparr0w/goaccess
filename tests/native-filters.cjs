@@ -78,5 +78,47 @@ context.fetch = async url => {
     assert.equal(fs.readFileSync(file, 'utf8').includes('panel-filter'), false, file);
   }
   assert.equal(fs.readFileSync('dashboard/server.py', 'utf8').includes('<iframe'), false);
+  // Loading must remove the full-screen hit target, not just its spinner.
+  const hidden = new Set();
+  context.document.querySelector = selector => ({
+    classList: { add(name) { if (name === 'hide') hidden.add(selector); }, remove() {} },
+    style: {}
+  });
+  app.AppPrefs = { layout: 'vertical' };
+  app.App.initDom();
+  assert.ok(hidden.has('.loading-container'));
+  // Exercise actual suggestion focus, mouse selection and keyboard selection.
+  function element() {
+    return { children: [], dataset: {}, attributes: {}, hidden: true,
+      setAttribute(key, value) { this.attributes[key] = value; },
+      removeAttribute(key) { delete this.attributes[key]; },
+      appendChild(child) { this.children.push(child); },
+      scrollIntoView() {}, classList: { add() {} } };
+  }
+  context.document.createElement = element;
+  for (const field of filters.fields) {
+    Object.assign(fields[field], element());
+    fields[field].parentNode = element();
+    fields[field].focus = () => { context.document.activeElement = fields[field]; };
+  }
+  let selections = 0;
+  filters.load = async () => { selections++; };
+  filters.config.suggestions = '/suggestions';
+  context.fetch = async url => ({ ok: true, json: async () => ['indexed.example'] });
+  filters.comboboxes();
+  const input = fields.site;
+  input.value = 'indexed'; input.focus();
+  await input.onfocus();
+  const list = input.parentNode.children[0];
+  assert.equal(list.hidden, false);
+  assert.equal(list.children[1].textContent, 'indexed.example');
+  list.children[1].onmousedown({ preventDefault() {} });
+  assert.equal(input.value, 'indexed.example');
+  assert.equal(selections, 1);
+  input.focus(); await input.onfocus();
+  input.onkeydown({ key: 'ArrowDown', preventDefault() {} });
+  input.onkeydown({ key: 'Enter', preventDefault() {} });
+  assert.equal(input.value, '');
+  assert.equal(selections, 2);
   console.log('Native report filter checks passed');
 })().catch(error => { console.error(error); process.exitCode = 1; });
