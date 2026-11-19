@@ -782,6 +782,16 @@ flag.
 Enable IP resolver on HTML|JSON|CSV output. Hostname resolution progress is
 shown unless progress metrics are disabled.
 .TP
+\fB\-\-filter=<FIELD=VALUE>
+Include only matching requests in every report panel. Repeat the option to
+combine rules with AND. Supported fields are site, ip, url, method, status,
+referrer, agent, protocol and user. Matching is case-sensitive and exact except
+for url, referrer and agent, which use substring matching. Missing fields do
+not match. Site filtering requires a virtual host in the log format (%v).
+Requires raw input logs and cannot be combined with --restore.
+.IP
+Example: --filter=site=example.com --filter=ip=192.0.2.1
+.TP
 \fB\-e \-\-exclude-ip=<IP|IP-range>
 Exclude an IPv4 or IPv6 from being counted. Applicable solely during access log
 data processing, it does not exclude persisted data.

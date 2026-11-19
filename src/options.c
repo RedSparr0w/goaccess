@@ -74,6 +74,7 @@ static const struct option long_opts[] = {
   {"config-file"          , required_argument , 0 , 'p' } ,
   {"debug-file"           , required_argument , 0 , 'l' } ,
   {"exclude-ip"           , required_argument , 0 , 'e' } ,
+  {"filter"               , required_argument , 0 , 0   } ,
 #ifdef HAVE_LIBMAXMINDDB
   {"exclude-asn"          , required_argument , 0 , 0  } ,
   {"include-asn"          , required_argument , 0 , 0  } ,
@@ -329,6 +330,11 @@ cmd_help (void)
   "                                    (default) or `min` (tenth of a min).\n"
   "  --ignore-crawlers               - Ignore crawlers.\n"
   "  --ignore-panel=<PANEL>          - Ignore parsing/displaying the given panel.\n"
+  "  --filter=<FIELD=VALUE>          - Include matching requests in every panel.\n"
+  "                                   Fields: site, ip, url, method, status,\n"
+  "                                   referrer, agent, protocol, user. Repeat\n"
+  "                                   for AND; exact match except URL/referrer/agent\n"
+  "                                   (case-sensitive substring).\n"
   "  --ignore-referrer=<NEEDLE>      - Ignore a referrer from being counted. Wild\n"
   "                                    cards are allowed. i.e., *.bing.com\n"
   "  --ignore-statics=<req|panel>    - Ignore static requests.\n"
@@ -1037,6 +1043,24 @@ parse_long_opt (const char *name, const char *oarg) {
   /* ignore crawlers */
   if (!strcmp ("ignore-crawlers", name))
     conf.ignore_crawlers = 1;
+
+  /* Report-wide request filters. Validate before parser threads start. */
+  if (!strcmp ("filter", name)) {
+    const char *eq = strchr (oarg, '=');
+    const char *fields[] = { "site", "ip", "url", "method", "status", "referrer", "agent", "protocol", "user" };
+    size_t i;
+    int valid = 0;
+    if (eq && eq != oarg && eq[1]) {
+      for (i = 0; i < sizeof fields / sizeof fields[0]; ++i)
+        if (strlen (fields[i]) == (size_t) (eq - oarg) && !strncmp (fields[i], oarg, eq - oarg))
+          valid = 1;
+    }
+    if (!valid)
+      FATAL ("Invalid --filter. Use site|ip|url|method|status|referrer|agent|protocol|user=VALUE");
+    if (conf.request_filter_idx >= MAX_REQUEST_FILTERS)
+      FATAL ("At most 32 request filters are supported");
+    conf.request_filters[conf.request_filter_idx++] = oarg;
+  }
 
   /* ignore panel */
   if (!strcmp ("ignore-panel", name))

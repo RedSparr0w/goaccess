@@ -59,6 +59,12 @@ jobs:
       - name: Make Check
         run: sudo make check
 
+      - name: Request filter integration checks
+        run: python3 tests/report_filters.py ./goaccess
+
+      - name: Dashboard service checks
+        run: python3 -m unittest discover -s tests -p test_dashboard.py -v
+
       - name: Make Distcheck
         run: sudo make distcheck
 

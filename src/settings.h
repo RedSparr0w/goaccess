@@ -41,6 +41,7 @@
 #define MAX_IGNORE_REF         64
 #define MAX_CUSTOM_COLORS      64
 #define MAX_IGNORE_STATUS      64
+#define MAX_REQUEST_FILTERS    32
 #define MAX_OUTFORMATS          3
 #define MAX_FILENAMES        3072
 #define MIN_DATENUM_FMT_LEN     7
@@ -111,6 +112,7 @@ typedef struct GConf_
   uint32_t exclude_asns[MAX_ASN_RULES];         /* sorted ASNs to exclude */
   uint32_t include_asns[MAX_ASN_RULES];         /* sorted ASNs to include */
   const char *ignore_ips[MAX_IGNORE_IPS];       /* array of ips to ignore */
+  const char *request_filters[MAX_REQUEST_FILTERS]; /* AND-combined field=value rules */
   const char *ignore_panels[TOTAL_MODULES];     /* array of panels to ignore */
   const char *ignore_referers[MAX_IGNORE_REF];  /* referrers to ignore */
   int ignore_status[MAX_IGNORE_STATUS]; /* status to ignore */
@@ -231,6 +233,7 @@ typedef struct GConf_
   int exclude_asn_idx;              /* excluded ASNs index */
   int include_asn_idx;              /* included ASNs index */
   int ignore_ip_idx;                /* ignored ips index */
+  int request_filter_idx;           /* request filter rules index */
   int ignore_panel_idx;             /* ignored panels index */
   int ignore_referer_idx;           /* ignored referrers index */
   int ignore_status_idx;            /* ignore status index */

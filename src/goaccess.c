@@ -2032,6 +2032,9 @@ main (int argc, char **argv) {
   parse_conf_file (&argc, &argv);
   parse_cmd_line (argc, argv);
 
+  if (conf.request_filter_idx && conf.restore)
+    FATAL ("--filter cannot be used with --restore; rebuild the report from raw logs with fresh storage.");
+
   logs = initializer ();
   if (conf.restore)
     preflight_persisted_data ();

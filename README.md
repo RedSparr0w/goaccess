@@ -4,7 +4,15 @@ GoAccess [![C build](https://github.com/RedSparr0w/goaccess/actions/workflows/bu
 This fork's main repository is [RedSparr0w/goaccess](https://github.com/RedSparr0w/goaccess).
 The original project is [allinurl/goaccess](https://github.com/allinurl/goaccess).
 
-### HTML table filters
+### Report-wide dashboard filters
+
+Run the [filtering dashboard service](dashboard/README.md) to select a website,
+client IP, URL, method, status, referrer, user agent, protocol or remote user.
+Filters combine with AND and run before aggregation, so every traffic panel,
+chart and total uses matching requests. The service reads NPM logs (including
+gzip archives) and supports building directly from GitHub with Docker Compose.
+
+### HTML table searches
 
 Each report table includes a case-insensitive substring search. Use Virtual Hosts
 to find a website (requires `%v` in the log format), Hosts to find an IP address,
@@ -17,8 +25,8 @@ pagination and remains active during live updates.
 These searches filter individual tables. Charts, summary metrics, percentages
 and table totals still describe the full report; independent aggregated panels
 cannot recalculate report-wide traffic for a selected website or IP. To limit an
-entire report, filter the input logs before processing (or use existing options
-such as `--exclude-ip`, `--ignore-status` and `--ignore-referrer`).
+entire report interactively, use the dashboard service above. The CLI also
+supports rules such as `--filter=site=example.com --filter=ip=192.0.2.1`.
 
 ## What is it? ##
 GoAccess is an open source, real-time web log analyzer and interactive viewer

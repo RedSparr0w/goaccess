@@ -23,7 +23,7 @@ RUN make -j$(nproc) && make DESTDIR=/dist install
 RUN ldd /dist/usr/bin/goaccess && echo "Dependencies checked"
 
 # Runtime stage
-FROM alpine:3.20
+FROM alpine:3.20 AS runtime
 RUN apk add --no-cache \
     gettext-libs \
     libmaxminddb \
@@ -39,3 +39,13 @@ VOLUME /var/www/goaccess
 EXPOSE 7890
 ENTRYPOINT ["/usr/bin/goaccess"]
 CMD ["--help"]
+
+# Optional report-wide filtering service. The default image remains the CLI.
+FROM runtime AS dashboard
+RUN apk add --no-cache python3
+COPY dashboard/server.py /opt/dashboard/server.py
+EXPOSE 7880
+ENTRYPOINT ["python3", "/opt/dashboard/server.py"]
+CMD []
+
+FROM runtime AS cli

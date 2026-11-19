@@ -1902,6 +1902,33 @@ is_404 (GLogItem *logitem) {
   return 0;
 }
 
+/* Match request filters before counting or aggregating a request. */
+static int
+matches_request_filters (GLogItem *logitem) {
+  int i;
+  for (i = 0; i < conf.request_filter_idx; ++i) {
+    const char *rule = conf.request_filters[i], *value = strchr (rule, '=') + 1;
+    const char *actual = NULL;
+    char status[16];
+    int substring = 0;
+    if (!strncmp (rule, "site=", 5)) actual = logitem->vhost;
+    else if (!strncmp (rule, "ip=", 3)) actual = logitem->host;
+    else if (!strncmp (rule, "url=", 4)) { actual = logitem->req; substring = 1; }
+    else if (!strncmp (rule, "method=", 7)) actual = logitem->method;
+    else if (!strncmp (rule, "protocol=", 9)) actual = logitem->protocol;
+    else if (!strncmp (rule, "user=", 5)) actual = logitem->userid;
+    else if (!strncmp (rule, "referrer=", 9)) { actual = logitem->ref; substring = 1; }
+    else if (!strncmp (rule, "agent=", 6)) { actual = logitem->agent; substring = 1; }
+    else if (!strncmp (rule, "status=", 7)) {
+      snprintf (status, sizeof status, "%d", logitem->status);
+      actual = status;
+    }
+    if (!actual || (substring ? strstr (actual, value) == NULL : strcmp (actual, value) != 0))
+      return 0;
+  }
+  return 1;
+}
+
 /* A wrapper function to determine if a log line needs to be ignored.
  *
  * If the request line is not ignored, 0 is returned.
@@ -2252,6 +2279,10 @@ parse_line (GLog *glog, char *line, int dry_run, GLogItem **logitem_out) {
   /* valid format but missing fields */
   if ((ret = verify_missing_fields (logitem)))
     return handle_invalid_line (glog, logitem, line, dry_run);
+
+  /* Dry runs validate the format even if the sample does not match. */
+  if (!dry_run && !matches_request_filters (logitem))
+    return cleanup_logitem (0, logitem);
 
   /* Only count processed during non-dry runs */
   if (!dry_run)
