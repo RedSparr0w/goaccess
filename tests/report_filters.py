@@ -59,9 +59,12 @@ with tempfile.TemporaryDirectory() as directory:
     ]) + '\n')
     with patch.dict(os.environ, {'GOACCESS_BIN': binary, 'LOG_PATH': str(root)}, clear=True):
         reports = Reports()
-        document, data = reports.get([('site', 'one.example')])
+        document, _ = reports.get([('site', 'one.example')])
+        payload, _ = reports.get([('site', 'one.example')], 'json')
+        data = json.loads(payload)
         assert b'<html' in document.lower()
         assert data['general']['valid_requests'] == 1
         assert data['general']['bandwidth'] == 100
         assert {row['data'] for row in data['hosts']['data']} == {'192.0.2.1'}
+        reports.close()
 print('Report-wide filter integration checks passed')

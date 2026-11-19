@@ -1777,14 +1777,6 @@ GoAccess.Tables = {
 			}.bind(this);
 		}.bind(this));
 
-		$$('.panel-filter', function (item) {
-			var panel = item.getAttribute('data-panel');
-			item.value = GoAccess.Util.getProp(GoAccess.AppState, panel + '.filter') || '';
-			item.oninput = debounce(function () {
-				GoAccess.Util.setProp(GoAccess.AppState, panel + '.filter', item.value);
-				this.renderTable(panel, 1);
-			}.bind(this), 150);
-		}.bind(this));
 
 		$$('.panel-prev', function (item) {
 			item.onclick = function (e) {
@@ -2007,34 +1999,6 @@ GoAccess.Tables = {
 		return Math.max(1, Math.ceil(dataItems.length / GoAccess.getPrefs().perPage));
 	},
 
-	// Keep matching descendants and their ancestors without modifying report data.
-	filterRows: function (rows, query) {
-		query = query.trim().toLowerCase();
-		if (!query) return rows;
-		return rows.reduce(function (matches, row) {
-			if (typeof row === 'string') {
-				if (row.toLowerCase().indexOf(query) !== -1) matches.push(row);
-				return matches;
-			}
-			var ownMatch = ['data', 'method', 'protocol'].some(function (key) {
-				return row[key] != null && String(row[key]).toLowerCase().indexOf(query) !== -1;
-			});
-			var children = this.filterRows(row.items || [], query);
-			if (ownMatch || children.length) {
-				matches.push(Object.assign({}, row, { items: ownMatch ? row.items : children }));
-			}
-			return matches;
-		}.bind(this), []);
-	},
-
-	getFilteredRows: function (panel) {
-		var rows = GoAccess.getPanelData(panel).data;
-		var query = GoAccess.Util.getProp(GoAccess.AppState, panel + '.filter') || '';
-		var filtered = this.filterRows(rows, query);
-		var count = $('.panel-filter-count[data-panel="' + panel + '"]');
-		if (count) count.textContent = query ? filtered.length + ' of ' + rows.length + ' top-level rows match' : '';
-		return filtered;
-	},
 
 	// Get a shallow copy of a portion of the given data array and the
 	// current page.
@@ -2246,7 +2210,7 @@ GoAccess.Tables = {
 			var emptyRow = table.insertRow();
 			var emptyCell = emptyRow.insertCell();
 			emptyCell.colSpan = ui.items.length + 2;
-			emptyCell.textContent = 'No matching rows';
+			emptyCell.textContent = 'No data on this panel.';
 			return;
 		}
 
@@ -2269,7 +2233,7 @@ GoAccess.Tables = {
 	},
 
 	renderTable: function (panel, page) {
-		var dataItems = this.getFilteredRows(panel);
+		var dataItems = GoAccess.getPanelData(panel).data;
 		var ui = GoAccess.getPanelUI(panel);
 
 		if (page === "LAST_PAGE") {
@@ -2299,10 +2263,9 @@ GoAccess.Tables = {
 		// render actual data
 		if (data.hasOwnProperty('data')) {
 			page = this.getCurPage(panel);
-			var filtered = this.getFilteredRows(panel);
-			page = Math.max(1, Math.min(page, this.getTotalPages(filtered)));
-			this.togglePagination(panel, page, filtered);
-			this.renderDataRows(panel, ui, filtered, page);
+			page = Math.max(1, Math.min(page, this.getTotalPages(data.data)));
+			this.togglePagination(panel, page, data.data);
+			this.renderDataRows(panel, ui, data.data, page);
 		}
 
 		// render meta data
@@ -2372,6 +2335,137 @@ GoAccess.Tables = {
 			this.reloadTables();
 		}, 250, false).bind(this));
 	},
+};
+
+// Report-wide filtering uses the same panels and charts as the live report.
+GoAccess.Filters = {
+	fields: ['site', 'ip', 'url', 'method', 'status', 'referrer', 'agent', 'protocol', 'user'],
+	requestId: 0,
+	cache: new Map(),
+
+	query: function (form) {
+		var query = new URLSearchParams();
+		this.fields.forEach(function (field) {
+			var value = form.elements.namedItem(field).value;
+			if (value) query.set(field, value);
+		});
+		return query;
+	},
+
+	readURL: function () {
+		var params = new URLSearchParams(window.location.search);
+		this.fields.forEach(function (field) {
+			this.form.elements.namedItem(field).value = params.get(field) || '';
+		}.bind(this));
+		this.section.querySelector('details').open = this.fields.slice(2).some(function (field) {
+			return ['method', 'status'].indexOf(field) === -1 && params.has(field);
+		});
+	},
+
+	scope: function (query) {
+		return query.size ? 'Traffic matching ' + Array.from(query, function (entry) {
+			return entry[0] + ' = ' + entry[1];
+		}).join(' AND ') : 'All traffic';
+	},
+
+	remember: function (query, data) {
+		if (this.cache.size >= 8 && !this.cache.has(query)) this.cache.delete(this.cache.keys().next().value);
+		this.cache.set(query, { time: Date.now(), data: data });
+	},
+
+	// Replace the entire aggregate dataset, including metadata and summary totals.
+	applyData: function (data) {
+		if (!data || !data.general || typeof data.general.valid_requests !== 'number')
+			throw new Error('The server returned an invalid report.');
+		GoAccess.AppData = data;
+		GoAccess.AppState = {};
+		GoAccess.AppCharts = {};
+		GoAccess.Tables.chartData = {};
+		GoAccess.App.setInitSort();
+		GoAccess.App.renderPanels();
+		this.suggestions(data);
+	},
+
+	suggestions: function (data) {
+		[['site', 'vhosts', 'traffic-sites'], ['ip', 'hosts', 'traffic-ips']].forEach(function (entry) {
+			var list = this.section.querySelector('#' + entry[2]);
+			var values = this.options[entry[0]];
+			((data[entry[1]] || {}).data || []).forEach(function (row) {
+				// Native report strings are HTML-escaped; inputs need the original value.
+				var text = document.createElement('span');
+				text.innerHTML = row.data;
+				values.add(text.textContent);
+			});
+			list.innerHTML = '';
+			Array.from(values).sort().forEach(function (value) {
+				var option = document.createElement('option');
+				option.value = value;
+				list.appendChild(option);
+			});
+		}.bind(this));
+	},
+
+	load: async function (refresh) {
+		var query = this.query(this.form), key = query.toString();
+		var requestId = ++this.requestId, started = performance.now();
+		if (this.controller) this.controller.abort();
+		this.controller = new AbortController();
+		var previousScope = this.scope(this.appliedQuery);
+		this.section.setAttribute('aria-busy', 'true');
+		this.status.textContent = 'Updating traffic… Showing ' + previousScope.toLowerCase() + ' until ready.';
+		try {
+			var entry = this.cache.get(key), data, response;
+			if (!refresh && entry && Date.now() - entry.time < this.config.cacheSeconds * 1000) {
+				data = entry.data;
+			} else {
+				if (refresh) query.set('_refresh', '1');
+				response = await fetch(this.config.endpoint + '?' + query, { signal: this.controller.signal });
+				data = await response.json();
+				if (!response.ok) throw new Error(data.error || 'Unable to load traffic.');
+			}
+			if (requestId !== this.requestId) return;
+			var renderStarted = performance.now();
+			this.applyData(data);
+			if (response) this.remember(key, data);
+			this.appliedQuery = new URLSearchParams(key);
+			window.history.replaceState(null, '', window.location.pathname + (key ? '?' + key : ''));
+			this.status.textContent = this.scope(this.appliedQuery) + ' · Updated in ' + ((performance.now() - started) / 1000).toFixed(1) + 's';
+			// Visible in DevTools alongside the backend's Server-Timing stages.
+			console.debug('GoAccess filter timing', {
+				totalMs: performance.now() - started, renderMs: performance.now() - renderStarted,
+				server: response ? response.headers.get('Server-Timing') : 'browser cache'
+			});
+		} catch (error) {
+			if (requestId === this.requestId && error.name !== 'AbortError')
+				this.status.textContent = error.message + ' Still showing ' + previousScope.toLowerCase() + '.';
+		} finally {
+			if (requestId === this.requestId) this.section.setAttribute('aria-busy', 'false');
+		}
+	},
+
+	initialize: function () {
+		this.config = window.goaccessFilterConfig;
+		if (!this.config || $('#traffic-filters')) return;
+		var target = document.createElement('div');
+		target.innerHTML = GoAccess.App.tpl($('#tpl-traffic-filters').innerHTML).render({});
+		this.section = target.firstElementChild;
+		$('#overall').parentNode.insertBefore(this.section, $('#overall'));
+		this.form = this.section.querySelector('form');
+		this.status = this.section.querySelector('[role="status"]');
+		this.options = { site: new Set(), ip: new Set() };
+		this.readURL();
+		this.appliedQuery = this.query(this.form);
+		this.status.textContent = this.scope(this.appliedQuery);
+		this.remember(this.appliedQuery.toString(), GoAccess.AppData);
+		this.suggestions(GoAccess.AppData);
+		this.form.onsubmit = function (event) { event.preventDefault(); this.load(false); }.bind(this);
+		this.section.querySelector('.traffic-filter-clear').onclick = function () {
+			this.form.reset();
+			this.load(false);
+		}.bind(this);
+		this.section.querySelector('.traffic-filter-refresh').onclick = function () { this.load(true); }.bind(this);
+		window.addEventListener('popstate', function () { this.readURL(); this.load(false); }.bind(this));
+	}
 };
 
 // Main App
@@ -2516,7 +2610,11 @@ GoAccess.App = {
 		this.setInitSort();
 		this.setTpls();
 		this.initDom();
+		GoAccess.Filters.initialize();
+		var renderStarted = window.goaccessFilterConfig ? performance.now() : null;
 		this.renderPanels();
+		if (renderStarted !== null)
+			console.debug('GoAccess initial render timing', { renderMs: performance.now() - renderStarted });
 	},
 };
 

@@ -65,6 +65,9 @@ jobs:
       - name: Dashboard service checks
         run: python3 -m unittest discover -s tests -p test_dashboard.py -v
 
+      - name: Native report filter checks
+        run: node tests/native-filters.cjs
+
       - name: Make Distcheck
         run: sudo make distcheck
 

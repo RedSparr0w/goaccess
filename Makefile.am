@@ -8,6 +8,7 @@ dist_noinst_DATA =                 \
   dashboard/compose.yml            \
   tests/report_filters.py          \
   tests/test_dashboard.py          \
+  tests/native-filters.cjs         \
   resources/tpls.html              \
   resources/css/app.css            \
   resources/css/bootstrap.min.css  \

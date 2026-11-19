@@ -12,21 +12,9 @@ Filters combine with AND and run before aggregation, so every traffic panel,
 chart and total uses matching requests. The service reads NPM logs (including
 gzip archives) and supports building directly from GitHub with Docker Compose.
 
-### HTML table searches
-
-Each report table includes a case-insensitive substring search. Use Virtual Hosts
-to find a website (requires `%v` in the log format), Hosts to find an IP address,
-or other panels to find URLs, referrers, status codes, browsers and other data.
-Request methods and protocols are also searchable when present. Clear the search
-field to restore all rows. Searches include nested rows and keep their ancestors;
-expand a matching group to inspect its children. Filtering applies before
-pagination and remains active during live updates.
-
-These searches filter individual tables. Charts, summary metrics, percentages
-and table totals still describe the full report; independent aggregated panels
-cannot recalculate report-wide traffic for a selected website or IP. To limit an
-entire report interactively, use the dashboard service above. The CLI also
-supports rules such as `--filter=site=example.com --filter=ip=192.0.2.1`.
+The controls are built into the native report. Filter changes request JSON and
+update its panels in place. There are no per-table search boxes or embedded
+report pages. See the dashboard documentation for deployment and timing details.
 
 ## What is it? ##
 GoAccess is an open source, real-time web log analyzer and interactive viewer

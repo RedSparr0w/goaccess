@@ -14,6 +14,7 @@ services:
       SKIP_ARCHIVED_LOGS: "False"
       KEEP_LAST: "90"
       REPORT_CACHE_SECONDS: "30"
+      REPORT_MAX_ITEMS: "366"
       REPORT_TIMEOUT: "180"
     volumes:
       - /home/redsparr0w/docker/npm/data/logs:/opt/log:ro

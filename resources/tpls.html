@@ -1,3 +1,35 @@
+<!-- Report-wide controls, mounted by the native report when its data API is enabled. -->
+<script id="tpl-traffic-filters" type="text/template">
+  <section id="traffic-filters" aria-label="Filter traffic">
+    <form class="traffic-filter-form">
+      <div class="traffic-filter-main">
+        <label for="traffic-site">Website<input id="traffic-site" name="site" class="form-control" list="traffic-sites" placeholder="All websites" maxlength="2048"></label>
+        <label for="traffic-ip">Client IP<input id="traffic-ip" name="ip" class="form-control" list="traffic-ips" placeholder="All IPs" maxlength="2048"></label>
+        <label for="traffic-method">Method<select id="traffic-method" name="method" class="form-control"><option value="">All methods</option><option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option><option>HEAD</option><option>OPTIONS</option><option>CONNECT</option><option>TRACE</option></select></label>
+        <label for="traffic-status">Status<input id="traffic-status" name="status" class="form-control" placeholder="All statuses" maxlength="3" inputmode="numeric" pattern="[1-5][0-9]{2}"></label>
+        <div class="traffic-filter-actions">
+          <button type="submit" class="btn btn-primary">Apply</button>
+          <button type="button" class="btn btn-default traffic-filter-clear">Clear</button>
+          <button type="button" class="btn btn-default traffic-filter-refresh" aria-label="Refresh traffic"><i class="fa fa-refresh" aria-hidden="true"></i></button>
+        </div>
+      </div>
+      <details class="traffic-filter-more">
+        <summary>More filters</summary>
+        <div class="traffic-filter-main">
+          <label for="traffic-url">URL contains<input id="traffic-url" name="url" class="form-control" maxlength="2048"></label>
+          <label for="traffic-referrer">Referrer contains<input id="traffic-referrer" name="referrer" class="form-control" maxlength="2048"></label>
+          <label for="traffic-agent">User agent contains<input id="traffic-agent" name="agent" class="form-control" maxlength="2048"></label>
+          <label for="traffic-protocol">Protocol<input id="traffic-protocol" name="protocol" class="form-control" placeholder="Any protocol" maxlength="2048"></label>
+          <label for="traffic-user">Remote user<input id="traffic-user" name="user" class="form-control" maxlength="2048"></label>
+        </div>
+      </details>
+      <datalist id="traffic-sites"></datalist><datalist id="traffic-ips"></datalist>
+    </form>
+    <p class="traffic-filter-scope" role="status" aria-live="polite"></p>
+    <small class="text-muted">Filters apply to every table, chart and total. Combine fields to narrow traffic.</small>
+  </section>
+</script>
+
 <!-- TPL General  -->
 <script id="tpl-general" type="text/template">
     <hgroup>
@@ -165,12 +197,6 @@
 	{{#table}}
 	<div class="row clearfix table-wrapper {{#autoHideTables}}hidden-xs{{/autoHideTables}}">
 		<div class="col-md-12">
-			<div class="panel-filter-wrap">
-				<label for="filter-{{id}}">Search {{head}} table</label>
-				<input id="filter-{{id}}" class="form-control panel-filter" type="search" data-panel="{{id}}" placeholder="Search table data" aria-describedby="filter-help-{{id}}">
-				<small id="filter-help-{{id}}" class="text-muted">Filters this table only; charts and totals show the full report.</small>
-				<small class="panel-filter-count" data-panel="{{id}}" role="status"></small>
-			</div>
 			<div class="table-responsive">
 				<table data-panel="{{id}}" class="table table-borderless table-hover table-{{id}}">
 					<colgroup>
